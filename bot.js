@@ -18,6 +18,7 @@ var setupBot = _.curry(function(controller, err, bot, payload) {
       .then(function() {
         setupHello(controller);
         setupCoffee(controller);
+        setupSlackbotComebacks(controller);
       });
   }
 }, 4);
@@ -50,6 +51,19 @@ var saveUser = _.curry(function(storage, user) {
   });
 }, 2);
 
+function findUser(controller, userId) {
+  return Q.promise(function(resolve, reject) {
+    controller.storage.users.get(message.user, function(err, user) {
+      if(err) {
+        reject(err);
+      }
+      else {
+        resolve(user);
+      }
+    });
+  });
+}
+
 function setupHello(controller) {
   var HELLOS = 'hello hi hey olá ola'.split(' ');
   controller.hears(HELLOS, MESSAGE_TYPES, sayHello);
@@ -57,14 +71,15 @@ function setupHello(controller) {
   function sayHello(bot, message) {
     addReaction(bot, message, 'robot_face');
 
-    controller.storage.users.get(message.user, function(err, user) {
-      if(user && user.name) {
-        bot.reply(message, 'Hello ' + user.real_name.split(' ')[0] + '!');
-      }
-      else {
-        bot.reply(message, 'Greetings!');
-      }
-    });
+    findUser(controller, message.user)
+      .then(function(user) {
+        if(user && user.name) {
+          bot.reply(message, 'Hello ' + user.real_name.split(' ')[0] + '!');
+        }
+        else {
+          bot.reply(message, 'Greetings!');
+        }
+      });
   }
 }
 
@@ -75,6 +90,32 @@ function setupCoffee(controller) {
   function handleCoffee(bot, message) {
     addReaction(bot, message, 'coffee');
     bot.reply(message, 'Soon');
+  }
+}
+
+function setupSlackbotComebacks(controller) {
+  controller.hears('Também posso ir?', 'ambient', respondNo);
+  controller.hears('NATAS? HÁ NATAS?', 'ambient', respondNotForYou);
+
+  function respondNo(bot, message) {
+    isFromSlackbot(controller, message, function() {
+      bot.reply(message, 'No! :angry:');
+    });
+  }
+
+  function respondNotForYou(bot, message) {
+    isFromSlackbot(controller, message, function() {
+      bot.reply(message, 'Not for you :smirk:');
+    });
+  }
+
+  function isFromSlackbot(controller, message, callback) {
+    findUser(controller, message.user)
+      .then(function(user) {
+        if(user.name.match(/slackbot/i)) {
+          callback();
+        }
+      });
   }
 }
 
